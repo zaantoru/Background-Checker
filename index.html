@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contractor Due Diligence | AI Analysis</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <style>
+        :root {
+            /* Professional Corporate Palette */
+            --primary: #0f172a;      /* Slate 900 */
+            --primary-light: #334155; 
+            --accent: #2563eb;       /* Blue 600 */
+            --bg-page: #f1f5f9;      /* Slate 100 */
+            --bg-card: #ffffff;
+            --border: #e2e8f0;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            
+            /* Status Colors */
+            --success-bg: #dcfce7; --success-text: #166534;
+            --warning-bg: #fef9c3; --warning-text: #854d0e;
+            --danger-bg: #fee2e2;  --danger-text: #991b1b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- Layout --- */
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            font-size: 32px;
+            color: var(--accent);
+        }
+
+        .brand-text h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -0.02em;
+        }
+
+        .brand-text span {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* Search Card */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper .material-symbols-outlined {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 20px;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px 12px 12px 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            color: var(--primary);
+            transition: all 0.2s;
+        }
+
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+            height: 45px;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-light);
+        }
+
+        /* Loading State */
+        .loading-overlay {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Report View */
+        .report-container {
+            display: none; /* Hidden by default */
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        
+        .risk-low { background: var(--success-bg); color: var(--success-text); }
+        .risk-medium { background: var(--warning-bg); color: var(--warning-text); }
+        .risk-high { background: var(--danger-bg); color: var(--danger-text); }
+
+        /* Grid Layout for Details */
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title .material-symbols-outlined {
+            color: var(--accent);
+        }
+
+        /* List Items */
+        .data-list {
+            list-style: none;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-item:last-child { border-bottom: none; }
+
+        .data-main { font-weight: 500; color: var(--text-main); }
+        .data-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+        .data-tag {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #f1f5f9;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .sources-bar {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .source-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: white;
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .source-pill span.icon { color: var(--success-text); font-size: 16px; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .search-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    
+    <header>
+        <div class="brand">
+            <span class="material-symbols-outlined brand-icon">verified_user</span>
+            <div class="brand-text">
+                <h1>VigilanceAI</h1>
+                <span>Contractor Due Diligence Platform</span>
+            </div>
+        </div>
+        <div>
+            <span style="background:#fef3c7; color:#92400e; padding:5px 10px; border-radius:4px; font-size:12px; font-weight:600;">
+                THESIS PROTOTYPE
+            </span>
+        </div>
+    </header>
+
+    <div class="card">
+        <div class="search-grid">
+            <div class="input-group">
+                <label>Subject Full Name</label>
+                <div class="input-wrapper">
+                    <span class="material-symbols-outlined">person_search</span>
+                    <input type="text" id="nameInput" placeholder="e.g. Juan dela Cruz Construction">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Entity Type</label>
+                <div class="input-wrapper">
+                    <span class="material-symbols-outlined">domain</span>
+                    <select id="typeInput">
+                        <option value="individual">Individual</option>
+                        <option value="company">Corporation</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="runAnalysis()">
+                <span class="material-symbols-outlined">search</span>
+                Run Analysis
+            </button>
+        </div>
+    </div>
+
+    <div id="loader" class="loading-overlay">
+        <div class="spinner"></div>
+        <p style="color:var(--text-muted); font-weight:500">Scanning 4 databases & analyzing sentiment...</p>
+    </div>
+
+    <div id="report" class="report-container">
+        
+        <div class="card" style="border-left: 5px solid var(--accent);">
+            <div class="report-header" style="margin-bottom:0;">
+                <div>
+                    <h2 style="font-size:1.5rem; font-weight:700; color:var(--primary)" id="resSubject">Subject Name</h2>
+                    <p style="color:var(--text-muted); margin-top:5px;">ID: <span id="resId">REQ-2025-8892</span> • <span id="resDate">Dec 12, 2025</span></p>
+                </div>
+                <div class="risk-badge" id="riskBadge">
+                    <span class="material-symbols-outlined">shield</span>
+                    <span id="riskText">LOW RISK</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="details-grid">
+            
+            <div class="card">
+                <div class="section-title">
+                    <span class="material-symbols-outlined">newspaper</span>
+                    News & Media Analysis
+                </div>
+                <ul class="data-list" id="newsList">
+                    </ul>
+            </div>
+
+            <div class="card">
+                <div class="section-title">
+                    <span class="material-symbols-outlined">gavel</span>
+                    Legal & Professional
+                </div>
+                <ul class="data-list" id="legalList">
+                    </ul>
+            </div>
+
+            <div class="card">
+                <div class="section-title">
+                    <span class="material-symbols-outlined">hub</span>
+                    Social Sentiment
+                </div>
+                <ul class="data-list" id="socialList">
+                    </ul>
+            </div>
+
+        </div>
+
+        <div class="sources-bar" id="sourcesList">
+            </div>
+
+    </div>
+</div>
+
+<script>
+    async function runAnalysis() {
+        const name = document.getElementById('nameInput').value;
+        if(!name) { alert("Please enter a name."); return; }
+
+        // UI Reset
+        document.getElementById('report').style.display = 'none';
+        document.getElementById('loader').style.display = 'block';
+
+        try {
+            // NOTE: Ensure your Python backend is running on port 5000!
+            const response = await fetch('http://127.0.0.1:5000/api/background-check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            });
+
+            if (!response.ok) throw new Error("Server not responding");
+
+            const data = await response.json();
+            renderReport(data);
+
+        } catch (error) {
+            alert("Connection Error: Make sure backend.py is running in your terminal!");
+            console.error(error);
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function renderReport(data) {
+        document.getElementById('report').style.display = 'block';
+        
+        // Header
+        document.getElementById('resSubject').textContent = data.subject;
+        document.getElementById('resDate').textContent = new Date().toLocaleDateString();
+        
+        // Risk Badge Logic
+        const badge = document.getElementById('riskBadge');
+        const rText = document.getElementById('riskText');
+        badge.className = 'risk-badge'; // reset
+        
+        if (data.risk.level === 'Low') {
+            badge.classList.add('risk-low');
+            rText.textContent = `APPROVED (${data.risk.score}/100)`;
+        } else if (data.risk.level === 'Medium') {
+            badge.classList.add('risk-medium');
+            rText.textContent = `REVIEW NEEDED (${data.risk.score}/100)`;
+        } else {
+            badge.classList.add('risk-high');
+            rText.textContent = `HIGH RISK (${data.risk.score}/100)`;
+        }
+
+        // 1. News Section
+        const newsContainer = document.getElementById('newsList');
+        newsContainer.innerHTML = data.news.map(n => `
+            <li class="data-item">
+                <div>
+                    <div class="data-main">${n.title}</div>
+                    <div class="data-sub">${n.source} • ${n.date}</div>
+                </div>
+                <div class="data-tag">${n.sentiment.toUpperCase()}</div>
+            </li>
+        `).join('');
+
+        // 2. Legal Section
+        const legalContainer = document.getElementById('legalList');
+        // Combined License and Court logic
+        let legalHTML = `
+            <li class="data-item">
+                <div>
+                    <div class="data-main">Prof. License Check</div>
+                    <div class="data-sub">${data.licenses.found ? 'Found in PRC Database' : 'Not Found'}</div>
+                </div>
+                <div class="data-tag" style="${data.licenses.found ? 'color:green' : 'color:red'}">
+                    ${data.licenses.status}
+                </div>
+            </li>
+            <li class="data-item">
+                <div>
+                    <div class="data-main">Court Records</div>
+                    <div class="data-sub">Supreme Court E-Library</div>
+                </div>
+                <div class="data-tag">${data.court.cases_found} CASES</div>
+            </li>
+        `;
+        legalContainer.innerHTML = legalHTML;
+
+        // 3. Social Section
+        const socialContainer = document.getElementById('socialList');
+        socialContainer.innerHTML = data.social.map(s => `
+            <li class="data-item">
+                <div>
+                    <div class="data-main">${s.platform}</div>
+                    <div class="data-sub">${s.summary}</div>
+                </div>
+                <div class="data-tag">${s.mentions} mentions</div>
+            </li>
+        `).join('');
+
+        // 4. Sources Footer
+        const sourcesContainer = document.getElementById('sourcesList');
+        sourcesContainer.innerHTML = data.sources.map(s => `
+            <div class="source-pill">
+                <span class="material-symbols-outlined icon">check_circle</span>
+                ${s.name}
+            </div>
+        `).join('');
+    }
+</script>
+
+</body>
+</html>
