@@ -252,6 +252,49 @@
             font-weight: 600;
         }
 
+        /* Reddit Comments Section */
+        .comment-card {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .comment-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .comment-text {
+            font-size: 0.9rem;
+            color: var(--text-main);
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .keywords {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .keyword-tag {
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            font-weight: 600;
+        }
+
         .sources-bar {
             margin-top: 30px;
             padding-top: 20px;
@@ -274,6 +317,7 @@
         }
 
         .source-pill span.icon { color: var(--success-text); font-size: 16px; }
+        .source-pill.unavailable span.icon { color: var(--warning-text); }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -328,7 +372,7 @@
 
     <div id="loader" class="loading-overlay">
         <div class="spinner"></div>
-        <p style="color:var(--text-muted); font-weight:500">Scanning 4 databases & analyzing sentiment...</p>
+        <p style="color:var(--text-muted); font-weight:500">Scanning news sources & analyzing public sentiment...</p>
     </div>
 
     <div id="report" class="report-container">
@@ -353,17 +397,7 @@
                     <span class="material-symbols-outlined">newspaper</span>
                     News & Media Analysis
                 </div>
-                <ul class="data-list" id="newsList">
-                    </ul>
-            </div>
-
-            <div class="card">
-                <div class="section-title">
-                    <span class="material-symbols-outlined">gavel</span>
-                    Legal & Professional
-                </div>
-                <ul class="data-list" id="legalList">
-                    </ul>
+                <ul class="data-list" id="newsList"></ul>
             </div>
 
             <div class="card">
@@ -371,14 +405,21 @@
                     <span class="material-symbols-outlined">hub</span>
                     Social Sentiment
                 </div>
-                <ul class="data-list" id="socialList">
-                    </ul>
+                <ul class="data-list" id="socialList"></ul>
             </div>
 
         </div>
 
-        <div class="sources-bar" id="sourcesList">
+        <!-- Reddit Comments Section -->
+        <div class="card" id="commentsSection" style="display:none;">
+            <div class="section-title">
+                <span class="material-symbols-outlined">chat</span>
+                Reddit Discussion Samples
             </div>
+            <div id="commentsList"></div>
+        </div>
+
+        <div class="sources-bar" id="sourcesList"></div>
 
     </div>
 </div>
@@ -393,7 +434,6 @@
         document.getElementById('loader').style.display = 'block';
 
         try {
-            // NOTE: Ensure your Python backend is running on port 5000!
             const response = await fetch('http://127.0.0.1:5000/api/background-check', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -423,7 +463,7 @@
         // Risk Badge Logic
         const badge = document.getElementById('riskBadge');
         const rText = document.getElementById('riskText');
-        badge.className = 'risk-badge'; // reset
+        badge.className = 'risk-badge';
         
         if (data.risk.level === 'Low') {
             badge.classList.add('risk-low');
@@ -444,34 +484,11 @@
                     <div class="data-main">${n.title}</div>
                     <div class="data-sub">${n.source} • ${n.date}</div>
                 </div>
-                <div class="data-tag">${n.sentiment.toUpperCase()}</div>
+                <div class="data-tag" style="${getSentimentColor(n.sentiment)}">${n.sentiment.toUpperCase()}</div>
             </li>
         `).join('');
 
-        // 2. Legal Section
-        const legalContainer = document.getElementById('legalList');
-        // Combined License and Court logic
-        let legalHTML = `
-            <li class="data-item">
-                <div>
-                    <div class="data-main">Prof. License Check</div>
-                    <div class="data-sub">${data.licenses.found ? 'Found in PRC Database' : 'Not Found'}</div>
-                </div>
-                <div class="data-tag" style="${data.licenses.found ? 'color:green' : 'color:red'}">
-                    ${data.licenses.status}
-                </div>
-            </li>
-            <li class="data-item">
-                <div>
-                    <div class="data-main">Court Records</div>
-                    <div class="data-sub">Supreme Court E-Library</div>
-                </div>
-                <div class="data-tag">${data.court.cases_found} CASES</div>
-            </li>
-        `;
-        legalContainer.innerHTML = legalHTML;
-
-        // 3. Social Section
+        // 2. Social Section
         const socialContainer = document.getElementById('socialList');
         socialContainer.innerHTML = data.social.map(s => `
             <li class="data-item">
@@ -479,18 +496,66 @@
                     <div class="data-main">${s.platform}</div>
                     <div class="data-sub">${s.summary}</div>
                 </div>
-                <div class="data-tag">${s.mentions} mentions</div>
+                <div class="data-tag" style="${getSentimentColor(s.sentiment)}">${s.mentions} mentions</div>
             </li>
         `).join('');
+
+        // 3. Reddit Comments Section (NEW!)
+        const commentsSection = document.getElementById('commentsSection');
+        const commentsList = document.getElementById('commentsList');
+        
+        let allComments = [];
+        data.social.forEach(s => {
+            if (s.sample_comments && s.sample_comments.length > 0) {
+                allComments = allComments.concat(s.sample_comments);
+            }
+        });
+
+        if (allComments.length > 0) {
+            commentsSection.style.display = 'block';
+            commentsList.innerHTML = allComments.map(c => `
+                <div class="comment-card">
+                    <div class="comment-header">
+                        <div class="comment-meta">
+                            <strong>r/${c.subreddit}</strong> • u/${c.author} • ${c.score} points
+                        </div>
+                        <div class="data-tag" style="${getSentimentColor(c.sentiment)}">
+                            ${c.sentiment.toUpperCase()}
+                        </div>
+                    </div>
+                    <div class="comment-text">${c.text}</div>
+                    ${c.keywords && c.keywords.length > 0 ? `
+                        <div class="keywords">
+                            ${c.keywords.map(k => `<span class="keyword-tag">🚨 ${k}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        } else {
+            commentsSection.style.display = 'none';
+        }
 
         // 4. Sources Footer
         const sourcesContainer = document.getElementById('sourcesList');
         sourcesContainer.innerHTML = data.sources.map(s => `
-            <div class="source-pill">
-                <span class="material-symbols-outlined icon">check_circle</span>
-                ${s.name}
+            <div class="source-pill ${s.status === 'unavailable' ? 'unavailable' : ''}">
+                <span class="material-symbols-outlined icon">
+                    ${s.status === 'completed' ? 'check_circle' : 'warning'}
+                </span>
+                ${s.name} ${s.count > 0 ? `(${s.count})` : ''}
             </div>
         `).join('');
+    }
+
+    function getSentimentColor(sentiment) {
+        const colors = {
+            'positive': 'background:#dcfce7; color:#166534',
+            'negative': 'background:#fee2e2; color:#991b1b',
+            'neutral': 'background:#f1f5f9; color:#64748b',
+            'mixed': 'background:#fef9c3; color:#854d0e',
+            'N/A': 'background:#f1f5f9; color:#64748b'
+        };
+        return colors[sentiment] || colors['neutral'];
     }
 </script>
 

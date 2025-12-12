@@ -17,6 +17,9 @@ from urllib.parse import quote_plus
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# NEWS API KEY
+NEWS_API_KEY = "f1876b55769f41c19b398ec60e01c5af"
+
 class RedditScraper:
     """Python wrapper for the Node.js Reddit scraper"""
     
@@ -101,13 +104,15 @@ class EnhancedBackgroundChecker:
         tagalog_negative = [
             'masama', 'pangit', 'corrupt', 'scam', 'delay', 'hindi', 
             'wala', 'problema', 'issue', 'reklamo', 'complaint', 'bad',
-            'poor', 'terrible', 'worst', 'bulok', 'basura', 'tanga'
+            'poor', 'terrible', 'worst', 'bulok', 'basura', 'tanga',
+            'fraud', 'fake', 'liar', 'unprofessional', 'late', 'slow',
+            'walang konsiderasyon', 'walang kwenta', 'disappointing'
         ]
         
         tagalog_positive = [
             'maganda', 'mabuti', 'professional', 'trusted', 'excellent',
             'quality', 'good', 'great', 'best', 'galing', 'sulit', 
-            'reliable', 'honest', 'legit', 'magaling'
+            'reliable', 'honest', 'legit', 'magaling', 'on-time', 'fast'
         ]
         
         text_lower = text.lower()
@@ -125,68 +130,131 @@ class EnhancedBackgroundChecker:
         # Clamp between -1 and 1
         return max(-1, min(1, base_score))
     
-    def search_google_news(self, name):
-        """Search for news articles using Google search"""
+    def extract_keywords(self, text):
+        """Extract negative keywords from text"""
+        negative_keywords = [
+            'corrupt', 'scam', 'fraud', 'fake', 'liar', 'unprofessional',
+            'masama', 'pangit', 'bulok', 'basura', 'walang konsiderasyon',
+            'walang kwenta', 'delay', 'problema', 'reklamo'
+        ]
+        
+        found = []
+        text_lower = text.lower()
+        for keyword in negative_keywords:
+            if keyword in text_lower:
+                found.append(keyword)
+        
+        return found
+    
+    def search_news_api(self, name):
+        """Search for news using NewsAPI"""
         findings = []
         
         try:
-            # Search Philippine news sites
-            search_queries = [
-                f'{name} site:mb.com.ph OR site:philstar.com OR site:inquirer.net OR site:rappler.com',
-                f'"{name}" Philippines news'
-            ]
+            # Calculate date range (last 30 days)
+            to_date = datetime.now()
+            from_date = to_date - timedelta(days=30)
             
-            for query in search_queries[:1]:  # Limit to 1 query to avoid rate limits
-                search_url = f"https://www.google.com/search?q={quote_plus(query)}&tbm=nws"
-                headers = {'User-Agent': self.user_agent}
+            # NewsAPI endpoint
+            url = "https://newsapi.org/v2/everything"
+            
+            params = {
+                'q': f'{name} Philippines',
+                'language': 'en',
+                'sortBy': 'relevancy',
+                'from': from_date.strftime('%Y-%m-%d'),
+                'to': to_date.strftime('%Y-%m-%d'),
+                'apiKey': NEWS_API_KEY,
+                'pageSize': 20
+            }
+            
+            print(f"🔍 Searching NewsAPI for: {name}")
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                articles = data.get('articles', [])
                 
-                response = requests.get(search_url, headers=headers, timeout=5)
-                soup = BeautifulSoup(response.text, 'html.parser')
+                if not articles:
+                    print(f"⚠️ No news found for: {name}")
+                    return [{
+                        'title': 'No recent news articles found',
+                        'date': datetime.now().strftime('%Y-%m-%d'),
+                        'source': 'NewsAPI',
+                        'url': '#',
+                        'snippet': f'No news coverage found for "{name}" in the past 30 days.',
+                        'sentiment': 'neutral',
+                        'sentiment_score': 0
+                    }]
                 
-                # Parse Google News results
-                news_divs = soup.find_all('div', class_='SoaBEf')[:5]  # Limit to 5 articles
-                
-                for div in news_divs:
-                    try:
-                        title_elem = div.find('div', class_='mCBkyc')
-                        source_elem = div.find('div', class_='CEMjEf')
-                        
-                        if title_elem:
-                            title = title_elem.get_text()
-                            source = source_elem.get_text() if source_elem else 'News Source'
-                            
-                            # Analyze sentiment of the title
-                            sentiment_score = self.analyze_sentiment_multilingual(title)
-                            
-                            findings.append({
-                                'title': title,
-                                'date': datetime.now().strftime('%Y-%m-%d'),
-                                'source': source,
-                                'url': '#',
-                                'snippet': title,
-                                'sentiment': 'positive' if sentiment_score > 0.1 else 'negative' if sentiment_score < -0.1 else 'neutral',
-                                'sentiment_score': sentiment_score
-                            })
-                    except:
+                for article in articles:
+                    title = article.get('title', '')
+                    description = article.get('description', '')
+                    content = f"{title} {description}"
+                    
+                    # Skip if title is too short
+                    if len(title) < 10:
                         continue
+                    
+                    # Analyze sentiment
+                    sentiment_score = self.analyze_sentiment_multilingual(content)
+                    
+                    findings.append({
+                        'title': title,
+                        'date': article.get('publishedAt', '')[:10],
+                        'source': article.get('source', {}).get('name', 'Unknown'),
+                        'url': article.get('url', '#'),
+                        'snippet': description or title,
+                        'sentiment': 'positive' if sentiment_score > 0.1 else 'negative' if sentiment_score < -0.1 else 'neutral',
+                        'sentiment_score': sentiment_score
+                    })
                 
-                time.sleep(1)  # Be polite to Google
-            
-            self.sources_checked.append({
-                'name': 'Google News Search', 
-                'count': len(findings), 
-                'status': 'completed'
-            })
-            
+                self.sources_checked.append({
+                    'name': 'NewsAPI Search', 
+                    'count': len(findings), 
+                    'status': 'completed'
+                })
+                
+                print(f"✅ Found {len(findings)} news articles")
+                return findings
+                
+            elif response.status_code == 426:
+                print("⚠️ NewsAPI rate limit reached")
+                return [{
+                    'title': 'News API rate limit reached',
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'source': 'System',
+                    'url': '#',
+                    'snippet': 'Too many requests. Please try again later.',
+                    'sentiment': 'neutral',
+                    'sentiment_score': 0
+                }]
+            else:
+                print(f"❌ NewsAPI error: {response.status_code}")
+                return [{
+                    'title': 'News search temporarily unavailable',
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'source': 'System',
+                    'url': '#',
+                    'snippet': 'Unable to retrieve news at this time.',
+                    'sentiment': 'neutral',
+                    'sentiment_score': 0
+                }]
+                
         except Exception as e:
             print(f"News search error: {e}")
-            # Return mock data if search fails
-            findings = self._get_mock_news(name)
-        
-        return findings if findings else self._get_mock_news(name)
+            return [{
+                'title': 'News search error',
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'source': 'System',
+                'url': '#',
+                'snippet': f'Error: {str(e)}',
+                'sentiment': 'neutral',
+                'sentiment_score': 0
+            }]
     
     def search_reddit(self, name):
-        """Search Reddit using Puppeteer scraper - NO API KEYS NEEDED"""
+        """Search Reddit using Puppeteer scraper"""
         social_data = []
         
         try:
@@ -206,12 +274,13 @@ class EnhancedBackgroundChecker:
                     'platform': 'Reddit Philippines',
                     'mentions': 0,
                     'sentiment': 'N/A',
-                    'summary': f"Scraper unavailable: {result['error']}"
+                    'summary': f"Unable to scan Reddit: {result['error']}",
+                    'sample_comments': []
                 })
                 self.sources_checked.append({
                     'name': 'Reddit Sentiment Scan',
                     'count': 0,
-                    'status': 'failed'
+                    'status': 'unavailable'
                 })
                 return social_data
             
@@ -223,7 +292,8 @@ class EnhancedBackgroundChecker:
                     'platform': 'Reddit Philippines',
                     'mentions': 0,
                     'sentiment': 'N/A',
-                    'summary': 'No discussions found about this entity.'
+                    'summary': 'No discussions found about this entity.',
+                    'sample_comments': []
                 })
                 self.sources_checked.append({
                     'name': 'Reddit Sentiment Scan',
@@ -236,10 +306,14 @@ class EnhancedBackgroundChecker:
             positive = 0
             negative = 0
             neutral = 0
+            sample_comments = []
             
             for post in posts:
                 full_text = post.get('full_text', '')
                 sentiment_score = self.analyze_sentiment_multilingual(full_text)
+                
+                # Extract negative keywords
+                keywords = self.extract_keywords(full_text)
                 
                 if sentiment_score > 0.1:
                     positive += 1
@@ -247,6 +321,21 @@ class EnhancedBackgroundChecker:
                     negative += 1
                 else:
                     neutral += 1
+                
+                # Add to sample comments (prioritize negative ones)
+                if len(sample_comments) < 5:
+                    sample_comments.append({
+                        'text': post.get('title', '')[:200],  # First 200 chars
+                        'author': post.get('author', 'anonymous'),
+                        'subreddit': post.get('subreddit', ''),
+                        'score': post.get('score', 0),
+                        'url': post.get('url', '#'),
+                        'sentiment': 'positive' if sentiment_score > 0.1 else 'negative' if sentiment_score < -0.1 else 'neutral',
+                        'keywords': keywords
+                    })
+            
+            # Sort sample comments by negativity (show negative first)
+            sample_comments.sort(key=lambda x: 0 if x['sentiment'] == 'negative' else 1 if x['sentiment'] == 'neutral' else 2)
             
             # Determine overall sentiment
             if positive > negative and positive > neutral:
@@ -261,14 +350,7 @@ class EnhancedBackgroundChecker:
                 'mentions': total_mentions,
                 'sentiment': overall_sentiment,
                 'summary': f'{positive} positive, {negative} negative, {neutral} neutral discussions found.',
-                'sample_posts': [
-                    {
-                        'title': p['title'],
-                        'subreddit': p['subreddit'],
-                        'score': p['score'],
-                        'url': p['url']
-                    } for p in posts[:3]  # Top 3 posts
-                ]
+                'sample_comments': sample_comments
             })
             
             self.sources_checked.append({
@@ -281,7 +363,18 @@ class EnhancedBackgroundChecker:
             
         except Exception as e:
             print(f"Reddit search error: {e}")
-            social_data = self._get_mock_social(name)
+            social_data.append({
+                'platform': 'Reddit Philippines',
+                'mentions': 0,
+                'sentiment': 'error',
+                'summary': f'Error scanning Reddit: {str(e)}',
+                'sample_comments': []
+            })
+            self.sources_checked.append({
+                'name': 'Reddit Sentiment Scan',
+                'count': 0,
+                'status': 'error'
+            })
         
         return social_data
     
@@ -305,75 +398,57 @@ class EnhancedBackgroundChecker:
         except:
             pass
     
-    def check_licenses(self, name):
-        """Mock License Check (PRC API requires official access)"""
-        # In production, you'd integrate with official PRC API
-        license_data = {
-            'found': True,
-            'license_number': 'PRC-' + str(hash(name) % 1000000),
-            'status': 'Active',
-            'expiry': '2025-12-31',
-            'violations': [],
-            'board': 'Professional Regulation Commission'
-        }
-        self.sources_checked.append({
-            'name': 'PRC Database Check',
-            'count': 1,
-            'status': 'simulated'
-        })
-        return license_data
-    
-    def check_court(self, name):
-        """Mock Court Check (Supreme Court E-Library can be scraped but requires proper auth)"""
-        court_data = {'cases_found': 0, 'cases': []}
-        self.sources_checked.append({
-            'name': 'Supreme Court E-Library',
-            'count': 0,
-            'status': 'simulated'
-        })
-        return court_data
-    
-    def calculate_risk(self, news, social, licenses, court):
+    def calculate_risk(self, news, social):
         """
-        Calculate risk score with heavy weighting on news (70%) 
-        and balanced social sentiment (30%)
+        Calculate risk score based ONLY on real data
         """
         score = 0
         factors = {}
         
         # NEWS ANALYSIS (70% weight)
-        news_sentiment_avg = sum([n['sentiment_score'] for n in news]) / len(news) if news else 0
-        
-        if news_sentiment_avg < -0.3:
-            score += 50
-            factors['news'] = 'Significantly negative media coverage'
-        elif news_sentiment_avg < -0.1:
-            score += 30
-            factors['news'] = 'Some negative media mentions'
-        elif news_sentiment_avg > 0.3:
-            score -= 10  # Bonus for good news
-            factors['news'] = 'Positive media presence'
-        else:
-            score += 10
-            factors['news'] = 'Neutral or limited coverage'
+        if news and len(news) > 0:
+            # Filter out "no news" entries
+            real_news = [n for n in news if 'No recent news' not in n['title'] and 'temporarily unavailable' not in n['title']]
+            
+            if real_news:
+                news_sentiment_avg = sum([n['sentiment_score'] for n in real_news]) / len(real_news)
+                
+                if news_sentiment_avg < -0.3:
+                    score += 50
+                    factors['news'] = 'Significantly negative media coverage detected'
+                elif news_sentiment_avg < -0.1:
+                    score += 30
+                    factors['news'] = 'Some negative media mentions found'
+                elif news_sentiment_avg > 0.3:
+                    score -= 10  # Bonus for good news
+                    factors['news'] = 'Positive media presence confirmed'
+                else:
+                    score += 5
+                    factors['news'] = 'Neutral media coverage'
+            else:
+                # No news found
+                score += 15
+                factors['news'] = 'Limited public media presence'
         
         # SOCIAL SENTIMENT (30% weight)
-        for s in social:
-            if s['sentiment'] == 'negative':
-                score += 20
-                factors['social'] = 'Negative public sentiment'
-            elif s['sentiment'] == 'positive':
-                score -= 5
-        
-        # LICENSE CHECK
-        if not licenses['found']:
-            score += 40
-            factors['license'] = 'No professional license found'
-        
-        # COURT CASES
-        if court['cases_found'] > 0:
-            score += 50
-            factors['legal'] = f"{court['cases_found']} court cases found"
+        if social and len(social) > 0:
+            for s in social:
+                if s['mentions'] > 0:
+                    if s['sentiment'] == 'negative':
+                        score += 25
+                        factors['social'] = 'Negative public discussions detected'
+                    elif s['sentiment'] == 'positive':
+                        score -= 5
+                        factors['social'] = 'Positive public sentiment'
+                    elif s['sentiment'] == 'mixed':
+                        score += 10
+                        factors['social'] = 'Mixed public opinions'
+                else:
+                    score += 10
+                    factors['social'] = 'No significant online discussions'
+        else:
+            score += 10
+            factors['social'] = 'Limited social media presence'
         
         # Final score clamping
         score = max(0, min(100, score))
@@ -381,33 +456,9 @@ class EnhancedBackgroundChecker:
         return {
             'score': score,
             'level': 'Low' if score < 30 else 'Medium' if score < 60 else 'High',
-            'recommendation': 'Approve for contracting' if score < 30 else 'Requires further review' if score < 60 else 'High risk - not recommended',
+            'recommendation': 'Approved for contracting' if score < 30 else 'Requires further review' if score < 60 else 'High risk - not recommended',
             'factors': factors
         }
-    
-    # Mock data fallbacks
-    def _get_mock_news(self, name):
-        return [
-            {
-                'title': f'{name} completes infrastructure project ahead of schedule',
-                'date': '2024-11-20',
-                'source': 'Manila Bulletin',
-                'url': '#',
-                'snippet': 'Project delivered with quality standards met.',
-                'sentiment': 'positive',
-                'sentiment_score': 0.6
-            }
-        ]
-    
-    def _get_mock_social(self, name):
-        return [
-            {
-                'platform': 'Reddit Philippines',
-                'mentions': 0,
-                'sentiment': 'N/A',
-                'summary': 'No recent discussions found (Reddit scraper unavailable).'
-            }
-        ]
 
 @app.route('/api/background-check', methods=['POST'])
 def perform_background_check():
@@ -422,13 +473,12 @@ def perform_background_check():
     checker = EnhancedBackgroundChecker()
     
     # Run all checks
-    news = checker.search_google_news(name)
+    news = checker.search_news_api(name)  # ✅ CHANGED: Now uses NewsAPI
     social = checker.search_reddit(name)
     checker.check_web_presence(name)
-    licenses = checker.check_licenses(name)
-    court = checker.check_court(name)
     
-    risk = checker.calculate_risk(news, social, licenses, court)
+    # Calculate risk based on REAL data only
+    risk = checker.calculate_risk(news, social)
     
     print(f"✅ Analysis complete - Risk Level: {risk['level']} ({risk['score']}/100)")
     
@@ -438,8 +488,6 @@ def perform_background_check():
         'risk': risk,
         'news': news,
         'social': social,
-        'licenses': licenses,
-        'court': court,
         'sources': checker.sources_checked
     })
 
@@ -449,11 +497,11 @@ if __name__ == '__main__':
     print("   📡 Running on http://127.0.0.1:5000")
     print("=" * 60)
     print("\n📋 Configuration Status:")
-    print("   ✅ Google News Search - Active (no API key needed)")
-    print("   ✅ Reddit Scraper - Active (Puppeteer-based, no API key needed)")
+    print("   ✅ NewsAPI - Active (Real news data)")
+    print("   ✅ Reddit Scraper - Active (Puppeteer-based)")
     print("   ✅ Sentiment Analysis - Active (multilingual)")
     print("\n💡 To enable Reddit scraping:")
-    print("   1. Install dependencies: npm install (in project folder)")
+    print("   1. Install dependencies: npm install (in reddit_scraper folder)")
     print("   2. Run Chrome with remote debugging:")
     print('      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"')
     print('      --remote-debugging-port=9222')

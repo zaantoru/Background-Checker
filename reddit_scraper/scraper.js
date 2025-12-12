@@ -13,7 +13,7 @@ class RedditScraper {
 
     async connect() {
         try {
-            // Connect to existing Chrome instance (same as Shopee scraper)
+            // Connect to existing Chrome instance
             this.browser = await puppeteer.connect({
                 browserURL: 'http://localhost:9222',
                 defaultViewport: null
@@ -23,6 +23,11 @@ class RedditScraper {
             console.error('Failed to connect to Chrome:', error.message);
             return false;
         }
+    }
+
+    // Helper function to wait (replacement for deprecated waitForTimeout)
+    async wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     async scrapeSearch(query, subreddits, maxPosts = 50) {
@@ -70,7 +75,8 @@ class RedditScraper {
                 timeout: 30000
             });
 
-            await this.page.waitForTimeout(2000);
+            // FIXED: Use custom wait function instead of waitForTimeout
+            await this.wait(2000);
 
             // Extract posts from intercepted data
             this.extractPosts(interceptedData);
